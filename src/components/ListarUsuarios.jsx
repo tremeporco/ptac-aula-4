@@ -11,36 +11,48 @@ export default function  ListaUsuarios() {
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
+  const controller = new AbortController()
+  const { signal } = controller
+
+  
     async function buscar() {
       try {
         setCarregando(true)
         setErro(null)
-        const resp = await fetch('https://jsonplaceholder.typicode.com/users')
+        const resp = await fetch('https://jsonplaceholder.typicode.com/users',{ signal })
         if (!resp.ok) {
           // 4xx ou 5xx — fetch NÃO rejeita para esses status! Precisamos lançar à mão.
           throw new Error(`HTTP ${resp.status} — ${resp.statusText}`)
         }
         const data = await resp.json()
         setUsuarios(data)
+        setCarregando(false)
       } catch (e) {
+        if (e.name === 'AbortError') return
         setErro(e.message)
       } finally {
-        setCarregando(false)
-      }
+  if (!signal.aborted) setCarregando(false)      }
     }
-    buscar()
+      buscar()
+    return () => controller.abort()
+  
   }, [])
 
   if (carregando) return <p>Carregando...</p>
   if (erro)     return <p>Erro: {erro}</p>
   if (usuarios.length === 0) return <p>Nenhum usuário encontrado.</p>
 
+  
   return (
+    <>
+  
+    <p>Sucesso: {usuarios.length} itens carregados.</p>
     <ul>
       {usuarios.map(u => (
         <li key={u.id}>{u.name}</li>
       ))}
     </ul>
+      </>
   )
 }
 
