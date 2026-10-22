@@ -1,4 +1,10 @@
 import { useEffect, useState } from 'react';
+import { apiGet, apiPost, apiPut, apiDelete, ApiError } from './api';
+
+const listarUsuarios = (signal) => apiGet('/users', { signal });
+const criarUsuario = (dados) => apiPost('/users', dados);
+const atualizarUsuario = (id, dados) => apiPut(`/users/${id}`, dados);
+const deletarUsuario = (id) => apiDelete(`/users/${id}`);
 
 export default function ListaUsuarios({ onEditar, onExcluir }) {
   const [usuarios, setUsuarios] = useState([]);
@@ -14,19 +20,26 @@ export default function ListaUsuarios({ onEditar, onExcluir }) {
         setCarregando(true);
         setErro(null);
         
-        const resp = await fetch('https://jsonplaceholder.typicode.com/users', { signal });
-        
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status} — ${resp.statusText}`);
-        }
-        
-        const data = await resp.json();
-     
-        
+        const data = await listarUsuarios(signal);
         setUsuarios(data);
       } catch (e) {
-        if (e.name === 'AbortError') return;
-        setErro(e.message);
+        if (e.name === 'AbortError') return; 
+
+        if (e instanceof ApiError) {
+          if (e.status === 404) {
+            setErro('Recurso não encontrado');
+          } else if (e.status === 500) {
+            setErro('Erro no servidor');
+          } else {
+            setErro(`Erro HTTP ${e.status}: ${e.statusText}`);
+          }
+        } 
+        else if (e instanceof TypeError && e.message.includes('fetch')) {
+          setErro('Falha de rede');
+        } 
+        else {
+          setErro(e.message || 'Erro ao carregar usuários.');
+        }
       } finally {
         if (!signal.aborted) {
           setCarregando(false);
@@ -36,40 +49,35 @@ export default function ListaUsuarios({ onEditar, onExcluir }) {
 
     buscar();
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+    };
   }, []);
 
-  async function excluirUsuario(id) {
-    if (!confirm('Deseja realmente excluir este usuário?')) return;
+  async function handleExcluir(id) {
+    if (!window.confirm('Deseja realmente excluir este usuário?')) return;
 
     try {
-      const resp = await fetch(`https://jsonplaceholder.typicode.com/users/${id}`, {
-        method: 'DELETE',
-      });
+      await deletarUsuario(id); 
       
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      console.log(`Usuário ${id} excluído`);
-
-      setUsuarios((usuariosAtuais) => usuariosAtuais.filter((u) => u.id !== id));
+      setUsuarios((atuais) => atuais.filter((u) => u.id !== id));
       
       if (onExcluir) onExcluir(id);
-      
     } catch (e) {
-      alert(`Erro ao excluir: ${e.message}`);
+      alert('Não foi possível excluir o usuário no servidor.');
     }
   }
 
   if (carregando) return <p>Carregando...</p>;
   if (erro) return <p>Erro: {erro}</p>;
-  if (usuarios.length === 0) return <p>Nenhum usuário encontrado.</p>;
 
   return (
     <ul>
       {usuarios.map((u) => (
         <li key={u.id}>
           {u.name}
-          <button onClick={() => onEditar(u)}>Editar</button>
-          <button onClick={() => excluirUsuario(u.id)}>Excluir</button>
+          <button onClick={() => onEditar && onEditar(u)}>Editar</button>
+          <button onClick={() => handleExcluir(u.id)}>Excluir</button> 
         </li>
       ))}
     </ul>
